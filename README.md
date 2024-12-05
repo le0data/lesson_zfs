@@ -7,6 +7,6 @@
     HDD - 8 дисков  (20Гб - система + 7 дисков для работы с ZFS)
 ![Basic_configure_zfs](https://github.com/user-attachments/assets/5f91fdc3-8943-48aa-8e45-2ebf2395ddd8)
 
-Представлен Ansible-platbook для работы с файловой системой ZFS
+Представлен Ansible-playbook для работы с файловой системой ZFS
 
 
