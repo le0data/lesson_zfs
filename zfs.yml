@@ -1,0 +1,205 @@
+---
+- name: Работа с ZFS
+  hosts: all
+  become: true
+  tasks:
+    - name: Обновление пакетов APT
+      apt:
+        update_cache: yes
+    
+    - name: Установлен ли ZFS
+      command: zfs --version
+      register: zfs_check
+      ignore_errors: yes
+
+    - name: Установка ZFS, если он не установлен
+      apt:
+        name: zfsutils-linux
+        state: present
+      when: zfs_check.failed
+    
+    - name: Убедиться, что ZFS установлен
+      command: zfs --version
+      register: zfs_version_output
+
+    - debug:
+        msg: "Версия ZFS: {{ zfs_version_output.stdout }}"
+
+    - name: Создать ZFS пул otus1
+      command: zpool create otus1 mirror /dev/vdb /dev/vdc
+      args:
+        creates: /otus1 #Условие, чтобы не создавался повторно пул!!!
+    
+    - name: СВыбор алгоритма сжатия lzjb
+      ansible.builtin.zfs:
+        name: otus1
+        state: present
+        extra_zfs_properties:
+          compression: lzjb
+          atime: off
+
+    - name: Проверка статуса ZFS пула otus1
+      shell: zpool status otus1
+      register: zpool_status_otus1
+
+    - debug:
+        msg: "{{ zpool_status_otus1.stdout }}"
+
+    - name: Создать ZFS пул otus2
+      command: zpool create otus2 mirror /dev/vdd /dev/vde
+      args:
+        creates: /otus2 #Условие, чтобы не создавался повторно пул!!!
+    
+    - name: Выбор алгоритма сжатия lz4
+      ansible.builtin.zfs:
+        name: otus2
+        state: present
+        extra_zfs_properties: 
+          compression: lz4
+          atime: off
+
+    - name: Проверка статуса ZFS пула otus2
+      shell: zpool status otus2
+      register: zpool_status_otus2
+
+    - debug:
+        msg: "{{ zpool_status_otus2.stdout }}"
+
+    - name: Создать ZFS пул otus3
+      command: zpool create otus3 mirror /dev/vdf /dev/vdg
+      args:
+        creates: /otus3 #Условие, чтобы не создавался повторно пул!!!
+    
+    - name: Выбор алгоритма сжатия gzip-9
+      ansible.builtin.zfs:
+        name: otus3
+        state: present
+        extra_zfs_properties: 
+          compression: gzip-9
+          atime: off
+
+    - name: Проверка статуса ZFS пула otus3
+      shell: zpool status otus3
+      register: zpool_status_otus3
+
+    - debug:
+        msg: "{{ zpool_status_otus3.stdout }}"
+
+    - name: Создать ZFS пул otus4
+      command: zpool create otus4 mirror /dev/vdh1 /dev/vdh2
+      args:
+        creates: /otus4 #Условие, чтобы не создавался повторно пул!!!
+    
+    - name: Выбор алгоритма сжатия zle
+      ansible.builtin.zfs:
+        name: otus4
+        state: present
+        extra_zfs_properties: 
+          compression: zle
+          atime: off
+
+    - name: Проверка статуса ZFS пула otus4
+      shell: zpool status otus4
+      register: zpool_status_otus4
+
+    - debug:
+        msg: "{{ zpool_status_otus4.stdout }}"
+
+    - name: Создание каталогов для ZFS пулов
+      file:
+        path: "/otus{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop: "{{ range(1, 5) | list }}"
+
+    - name: Скачиваем файл в каждый пул
+      get_url:
+        url: "https://gutenberg.org/cache/epub/2600/pg2600.converter.log"
+        dest: "/otus{{ item }}/pg2600.converter.log"
+      loop: "{{ range(1, 5) | list }}"
+    
+    - name: Вывести список всех ZFS пулов
+      command: zfs list
+      register: zfs_list_output
+
+    - debug:
+        msg: "{{ zfs_list_output.stdout }}"
+
+    - name: Показать степень сжатия для каждого ZFS пула
+      shell: zfs get all | grep compressratio | grep -v ref
+      register: zfs_compressratio_output
+
+    - debug:
+        msg: "{{ zfs_compressratio_output.stdout }}"
+
+    - name: Скачиваем архив с ZFS пулом
+      get_url:
+        url: "https://drive.usercontent.google.com/download?id=1MvrcEp-WgAQe57aDEzxSRalPAwbNN1Bb&export=download"
+        dest: "/tmp/archive.tar.gz"
+        validate_certs: no
+
+    - name: Распаковать архив с ZFS пулом
+      ansible.builtin.unarchive:
+        src: "/tmp/archive.tar.gz"
+        dest: "/"
+        remote_src: true
+
+    - name: Импортировать ZFS пул otus
+      shell: zpool import -d /zpoolexport/ otus
+      args:
+        creates: "/otus"  # Условие, чтобы импорт не выполнялся повторно
+
+    - name: Получить параметры пула otus
+      shell: zpool get all otus
+      register: zpool_get_output_otus
+
+    - debug:
+        msg: "{{ zpool_get_output_otus.stdout }}"
+
+    - name: Получить параметры файловой системы otus
+      shell: zfs get all otus
+      register: zfs_get_output_otus
+
+    - debug:
+        msg: "{{ zfs_get_output_otus.stdout }}"
+    
+    - name: Скаиваем файл для поиска сообщения от преподавателя
+      get_url:
+        url: "https://drive.usercontent.google.com/download?id=1wgxjih8YZ-cqLqaZVa0lA3h3Y029c3oI&export=download"
+        dest: "/tmp/otus_task2.file"
+        validate_certs: no
+
+    - name: Проверяем, существует ли снапшот otus/test@today
+      shell: zfs list -t snapshot | grep "otus/test@today"
+      register: snapshot_check
+      failed_when: false
+
+    - name: Восстанавоиваем файловую систему из снапшота
+      shell: zfs receive -F otus/test@today < /tmp/otus_task2.file
+      args:
+        executable: /bin/bash
+      when: snapshot_check.rc != 0
+      register: zfs_receive_output
+
+    - debug:
+        msg: "Результат восстановления снапшота: {{ zfs_receive_output.stdout if snapshot_check.rc != 0 else 'Снапшот уже существует, восстановление пропущено.'}}"
+
+    - name: Ищем файл secret_message
+      find:
+        paths: "/otus/test/task1/file_mess"
+        patterns: "secret_message"
+      register: secret_file
+
+    - name: Проверить, найден ли файл secret_message
+      debug:
+        msg: "Найден файл: {{ secret_file.files[0].path if secret_file.matched > 0 else 'Файл не найден' }}"
+
+    - name: Показать содержимое файла secret_message
+      command: cat "{{ secret_file.files[0].path }}"
+      when: secret_file.matched > 0
+      register: secret_message_content
+
+    - debug:
+        msg: "{{ secret_message_content.stdout if secret_file.matched > 0 else 'Файл отсутствует' }}"
